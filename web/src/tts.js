@@ -148,9 +148,9 @@ export function createTtsPlayer(host) {
   let sessionStart = null;
   let pendingOpen = null;
   let voiceAt = 0;
+  let userAt = 0;
   let sleepTimer = 0;
   let autoTimer = 0;
-  let nativeStartTimer = 0;
   let autoPending = false;
   let backPlace = null;
   let backTimer = 0;
@@ -293,16 +293,14 @@ export function createTtsPlayer(host) {
     }
     remember(item);
     metadata(item);
-    if (!shouldScroll || !item.element.getClientRects().length) return;
+    if (!shouldScroll || Date.now() - userAt < 5000 || !item.element.getClientRects().length) return;
     const rect = range && window.CSS?.highlights && window.Highlight
       ? range.getBoundingClientRect()
       : item.element.querySelector('.tts-highlight-fallback')?.getBoundingClientRect() ?? item.element.getBoundingClientRect();
-    const top = document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0;
-    const playerTop = document.querySelector('.bottom-shell')?.getBoundingClientRect().top ?? window.innerHeight;
-    const center = top + Math.max(0, playerTop - top) / 2;
-    const sentenceCenter = rect.top + rect.height / 2;
-    if (state.playing || rect.top < top + 8 || rect.bottom > playerTop - 8) {
-      window.scrollBy({ top: sentenceCenter - center, behavior: 'smooth' });
+    const top = (document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0) + 8;
+    const bottom = (document.querySelector('.bottom-shell')?.getBoundingClientRect().top ?? window.innerHeight) - 8;
+    if (rect.top < top || rect.bottom > bottom) {
+      window.scrollBy({ top: rect.top - (top + (bottom - top) * 0.2), behavior: 'smooth' });
     }
   }
 
@@ -319,6 +317,19 @@ export function createTtsPlayer(host) {
     const top = document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0;
     const bottom = document.querySelector('.bottom-shell')?.getBoundingClientRect().top ?? window.innerHeight;
     return rect.bottom > top && rect.top < bottom;
+  }
+
+  function firstOnScreen() {
+    const top = (document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0) + 8;
+    for (const element of activeBlocks()) {
+      if (element.getBoundingClientRect().bottom <= top) continue;
+      const block = blockData(element);
+      const sentence = block.sentences.findIndex(([start, end]) =>
+        (makeRange(element, start, end)?.getBoundingClientRect().top ?? -1) >= top,
+      );
+      if (sentence >= 0) return { key: block.key, sentence };
+    }
+    return firstVisible();
   }
 
   function elementsQueue(from) {
@@ -592,20 +603,19 @@ export function createTtsPlayer(host) {
       updatePlayerState();
       return;
     }
-    if (!current || !resolveCurrent()) current = firstVisible();
-    if (!current) {
-      showError('Не удалось определить место для озвучивания.');
-      updatePlayerState();
-      return;
-    }
     const item = resolveCurrent();
     if (!item) {
-      showError('Выбранный текст недоступен для озвучивания.');
+      showError('Не удалось определить место для озвучивания.');
       updatePlayerState();
       return;
     }
     sessionStart ??= { paper: host.getPaper()?.paper.id, key: current.key, sentence: current.sentence };
     state.playing = true;
+    userAt = 0;
+    const my = ++run;
+    nativeRequests.clear();
+    stopEngine();
+    showPosition(item);
     queue = elementsQueue(current);
     queueIndex = 0;
     if (!queue.length) {
@@ -613,32 +623,15 @@ export function createTtsPlayer(host) {
       showError('В выбранном месте нет текста для озвучивания.');
       return;
     }
-    const my = ++run;
-    nativeRequests.clear();
-    clearTimeout(nativeStartTimer);
-    nativeStartTimer = 0;
-    // Match the source player: cancel the previous native/browser queue, then enqueue
-    // the new reading session with QUEUE_ADD.
-    stopEngine();
     updatePlayerState();
     syncNativePlayer();
-    if (native) {
-      // The source app reaches speech after its asynchronous dictionary load. Keep
-      // that cancellation-to-speak gap here: Android TTS may otherwise process
-      // stop() after the new queue and cancel the first utterance.
-      nativeStartTimer = window.setTimeout(() => {
-        nativeStartTimer = 0;
-        if (my === run && state.playing) speakNative(my);
-      }, 150);
-    }
+    if (native) speakNative(my);
     else speakBrowser(my);
   }
 
   function pause() {
     clearTimeout(autoTimer);
     autoTimer = 0;
-    clearTimeout(nativeStartTimer);
-    nativeStartTimer = 0;
     autoPending = false;
     state.playing = false;
     run += 1;
@@ -653,18 +646,15 @@ export function createTtsPlayer(host) {
     autoTimer = 0;
     autoPending = true;
     updatePlayerState();
-    if (!resolveCurrent()) return;
     autoTimer = window.setTimeout(() => {
       autoTimer = 0;
       if (!state.open || state.playing) return;
-      if (!currentIsVisible(resolveCurrent())) current = firstVisible();
-      start();
+      play();
     }, 2000);
   }
 
   function open(auto = false) {
     clearTimeout(autoTimer);
-    if (!currentIsVisible(resolveCurrent())) current = firstVisible();
     state.open = true;
     state.settingsOpen = false;
     showPosition(resolveCurrent(), false);
@@ -696,17 +686,17 @@ export function createTtsPlayer(host) {
       return;
     }
     if (state.playing) pause();
-    else {
-      const active = resolveCurrent();
-      if (active) {
-        const range = makeRange(active.element, active.start, active.end);
-        const rect = range?.getBoundingClientRect() ?? active.element.getBoundingClientRect();
-        const top = document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0;
-        const bottom = ui.panel.getBoundingClientRect().top;
-        if (rect.bottom <= top || rect.top >= bottom) current = firstVisible();
-      }
-      start();
+    else play();
+  }
+
+  function play() {
+    if (!native && !synth) {
+      showError('На этом устройстве не найден синтез речи.');
+      return;
     }
+    const active = resolveCurrent();
+    if (!active || !currentIsVisible(active)) current = firstOnScreen();
+    start();
   }
 
   function stepSentence(direction) {
@@ -903,6 +893,9 @@ export function createTtsPlayer(host) {
     updatePlayerState();
     ui.back.addEventListener('click', () => void returnToPreviousPlace());
     ui.play.addEventListener('click', toggle);
+    const markUserScroll = () => { userAt = Date.now(); };
+    document.addEventListener('touchstart', markUserScroll, { passive: true });
+    document.addEventListener('wheel', markUserScroll, { passive: true });
     ui.language.addEventListener('click', () => {
       state.lang = state.lang === 'ru' ? 'en' : 'ru';
       current = current ? { key: current.key, sentence: 0 } : null;
@@ -1115,18 +1108,13 @@ export function createTtsPlayer(host) {
       }, 250);
       return;
     }
-    if (!current && state.place?.paper === data.paper.id
-      && activeBlocks().some((block) => block.dataset.ttsKey === state.place.key)) {
-      current = { key: state.place.key, sentence: state.place.sentence };
-    }
     if (current && !resolveCurrent()) {
       pause();
       current = null;
       clearHighlight();
     }
     if (state.open && autoPending && !autoTimer) {
-      if (!resolveCurrent()) current = firstVisible();
-      if (resolveCurrent()) scheduleAutoStart();
+      scheduleAutoStart();
     }
   }
 
@@ -1159,7 +1147,7 @@ export function createTtsPlayer(host) {
   }
 
   function onNativeCommand(action) {
-    if (action === 'play') start();
+    if (action === 'play') play();
     else if (action === 'pause') pause();
     else if (action === 'next') stepBlock(1);
     else if (action === 'prev') stepBlock(-1);

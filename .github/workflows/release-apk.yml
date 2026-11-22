@@ -28,7 +28,6 @@ jobs:
       ANDROID_BUILD_VARIANT: release
       ANDROID_VERSION_CODE: ${{ github.run_number }}
       ANDROID_VERSION_NAME: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
-      ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/upexplorer-release.keystore
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
 
     steps:
@@ -50,6 +49,7 @@ jobs:
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/upexplorer-release.keystore
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
             echo "::error::Set ANDROID_KEYSTORE_BASE64 and the other Android signing secrets in repository Actions settings."
@@ -60,6 +60,7 @@ jobs:
       - name: Build signed APK
         run: npm run build
         env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/upexplorer-release.keystore
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}

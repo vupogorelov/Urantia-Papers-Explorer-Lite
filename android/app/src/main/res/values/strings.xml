@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Urantia Papers Explorer</string>
+    <string name="tts_channel">Озвучивание книги</string>
+    <string name="tts_previous">Предыдущий абзац</string>
+    <string name="tts_pause">Пауза</string>
+    <string name="tts_play">Продолжить</string>
+    <string name="tts_next">Следующий абзац</string>
+    <string name="tts_close">Закрыть плеер</string>
+</resources>

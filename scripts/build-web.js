@@ -28,6 +28,7 @@ for (const destination of [androidWeb, browserWeb]) {
     cp(resolve(source, 'pinch-font.js'), resolve(destination, 'pinch-font.js')),
     cp(resolve(source, 'storage.js'), resolve(destination, 'storage.js')),
     cp(resolve(source, 'tts.js'), resolve(destination, 'tts.js')),
+    cp(resolve(source, 'updates.js'), resolve(destination, 'updates.js')),
     cp(resolve(source, 'sentences.js'), resolve(destination, 'sentences.js')),
     cp(resolve(source, 'pronunciation-defaults.js'), resolve(destination, 'pronunciation-defaults.js')),
     cp(fonts, fontDestination, { recursive: true, force: true }),

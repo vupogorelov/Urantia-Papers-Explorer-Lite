@@ -5,6 +5,8 @@ import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageInfo;
 import android.content.Intent;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -161,6 +163,24 @@ public final class MainActivity extends Activity {
                 public void clearDiagnostics() {
                     ttsDiagnostics.clear();
                     ttsDiagnostics.add("diagnostics.cleared", "source=app");
+                }
+
+                @JavascriptInterface
+                public boolean copyText(String text) {
+                    if (text == null || text.length() > 300000) {
+                        ttsDiagnostics.add("diagnostics.copy.failed", "reason=invalid_size");
+                        return false;
+                    }
+                    try {
+                        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                        if (clipboard == null) return false;
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Журнал озвучки", text));
+                        ttsDiagnostics.add("diagnostics.copy", "chars=" + text.length());
+                        return true;
+                    } catch (RuntimeException error) {
+                        ttsDiagnostics.add("diagnostics.copy.failed", "type=" + error.getClass().getSimpleName());
+                        return false;
+                    }
                 }
 
                 @JavascriptInterface

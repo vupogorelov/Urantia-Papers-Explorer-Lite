@@ -1080,22 +1080,29 @@ export function createTtsPlayer(host) {
     ui.diagnosticsRefresh.addEventListener('click', renderDiagnostics);
     ui.diagnosticsCopy.addEventListener('click', async () => {
       const output = diagnosticsText();
+      let copied = false;
       try {
-        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(output);
-        else throw new Error('clipboard API unavailable');
-      } catch {
+        if (typeof native?.copyText === 'function') {
+          copied = native.copyText(output) === true;
+        } else if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(output);
+          copied = true;
+        }
+      } catch {}
+      if (!copied) {
         const field = document.createElement('textarea');
         field.value = output;
         field.style.position = 'fixed';
         field.style.opacity = '0';
-        document.body.append(field);
+        ui.diagnosticsDialog.append(field);
+        field.focus();
         field.select();
-        const copied = document.execCommand('copy');
+        copied = document.execCommand('copy');
         field.remove();
-        if (!copied) {
-          host.showMessage('Не удалось скопировать журнал. Выделите его вручную.');
-          return;
-        }
+      }
+      if (!copied) {
+        host.showMessage('Не удалось скопировать журнал. Попробуйте удержать текст журнала и выбрать «Копировать».');
+        return;
       }
       host.showMessage('Журнал озвучки скопирован.');
     });

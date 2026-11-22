@@ -1471,6 +1471,31 @@ body.tts-open .reading-progress { display: none; }
   color: var(--text);
 }
 .tts-dictionary-dialog::backdrop { background: rgb(0 0 0 / 42%); }
+.tts-diagnostics-dialog { max-height: min(88vh, 760px); }
+.tts-diagnostics-note { margin: 10px 0; color: var(--muted); font-size: 13px; }
+.tts-diagnostics-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tts-diagnostics-actions button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+.tts-diagnostics-output {
+  min-height: 180px;
+  max-height: 52vh;
+  margin: 12px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .tts-dictionary-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .tts-dictionary-header h2 { margin: 0; font-size: 18px; }
 .tts-dictionary-header button {

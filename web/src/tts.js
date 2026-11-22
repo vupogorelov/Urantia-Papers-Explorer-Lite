@@ -121,6 +121,13 @@ export function createTtsPlayer(host) {
     dictionaryList: document.querySelector('#tts-dictionary-list'),
     dictionaryClose: document.querySelector('#tts-dictionary-close'),
     dictionarySummary: document.querySelector('#tts-dictionary-summary'),
+    diagnosticsOpen: document.querySelector('#tts-diagnostics-open'),
+    diagnosticsDialog: document.querySelector('#tts-diagnostics-dialog'),
+    diagnosticsClose: document.querySelector('#tts-diagnostics-close'),
+    diagnosticsRefresh: document.querySelector('#tts-diagnostics-refresh'),
+    diagnosticsCopy: document.querySelector('#tts-diagnostics-copy'),
+    diagnosticsClear: document.querySelector('#tts-diagnostics-clear'),
+    diagnosticsOutput: document.querySelector('#tts-diagnostics-output'),
   };
   const native = window.NativeTts ?? null;
   const synth = native ? null : window.speechSynthesis ?? null;
@@ -158,12 +165,67 @@ export function createTtsPlayer(host) {
   let initialized = false;
   let ready = false;
   let pendingListenOpen = false;
+  let diagnostics = [];
+  let diagnosticsSaveTimer = 0;
+  let startWatchdog = 0;
+  let nativeRunStarted = false;
+  const DIAGNOSTICS_KEY = 'upexplorer-lite-tts-log-v1';
+  const DIAGNOSTICS_LIMIT = 400;
+
+  try {
+    const savedLog = JSON.parse(localStorage.getItem(DIAGNOSTICS_KEY) ?? '[]');
+    if (Array.isArray(savedLog)) {
+      diagnostics = savedLog.filter((entry) => entry && Number.isFinite(entry.at) && typeof entry.event === 'string')
+        .slice(-DIAGNOSTICS_LIMIT);
+    }
+  } catch {
+    diagnostics = [];
+  }
+
+  function persistDiagnosticsNow() {
+    clearTimeout(diagnosticsSaveTimer);
+    diagnosticsSaveTimer = 0;
+    try { localStorage.setItem(DIAGNOSTICS_KEY, JSON.stringify(diagnostics)); } catch {}
+  }
+
+  function logTts(event, details = {}) {
+    diagnostics.push({ at: Date.now(), source: 'web', event, run, details });
+    if (diagnostics.length > DIAGNOSTICS_LIMIT) diagnostics.splice(0, diagnostics.length - DIAGNOSTICS_LIMIT);
+    if (!diagnosticsSaveTimer) diagnosticsSaveTimer = window.setTimeout(persistDiagnosticsNow, 250);
+    if (ui.diagnosticsDialog.open) renderDiagnostics();
+  }
+
+  function diagnosticsText() {
+    let android = [];
+    try {
+      const raw = native?.diagnostics?.();
+      android = raw ? JSON.parse(raw) : [];
+    } catch (error) {
+      android = [{ at: Date.now(), event: 'android-log.read-failed', details: error.message }];
+    }
+    const rows = [
+      ...diagnostics,
+      ...(Array.isArray(android) ? android.map((entry) => ({ ...entry, source: 'android' })) : []),
+    ].sort((left, right) => left.at - right.at).slice(-500);
+    if (!rows.length) return 'Журнал пока пуст. Запустите озвучку и откройте журнал снова.';
+    return rows.map((entry) => {
+      const time = Number.isFinite(entry.at) ? new Date(entry.at).toISOString() : 'unknown-time';
+      const details = typeof entry.details === 'string' ? entry.details : JSON.stringify(entry.details ?? {});
+      return `${time} ${String(entry.source ?? 'web').toUpperCase()} ${entry.event} ${details}`.trimEnd();
+    }).join('\n');
+  }
+
+  function renderDiagnostics() {
+    if (ui.diagnosticsOutput) ui.diagnosticsOutput.textContent = diagnosticsText();
+  }
 
   function showError(text) {
+    logTts('ui.error', { message: text });
     host.showMessage(text);
   }
 
   ui.button.addEventListener('click', () => {
+    logTts('listen.button', { ready, open: state.open, autoStart: state.autoStart });
     if (!ready) {
       pendingListenOpen = true;
       return;
@@ -459,6 +521,7 @@ export function createTtsPlayer(host) {
         engine: '',
       }));
     }
+    logTts('voices.loaded', { source: native ? 'android' : synth ? 'browser' : 'none', count: speechVoices.length, lang: state.lang });
     updatePlayerState();
   }
 
@@ -472,7 +535,8 @@ export function createTtsPlayer(host) {
     }
   }
 
-  function stopEngine() {
+  function stopEngine(reason = 'unspecified') {
+    logTts('engine.cancel.request', { reason, playing: state.playing });
     if (native) native.cancel();
     else synth?.cancel();
   }
@@ -557,8 +621,19 @@ export function createTtsPlayer(host) {
       const id = String(++nativeSequence);
       item.nativeId = id;
       nativeRequests.set(id, { run: my, index });
-      native.speak(id, item.text, state.lang === 'ru' ? 'ru-RU' : 'en-US',
-        prefs.voice, prefs.rate, prefs.pitch, prefs.volume);
+      if (index < 5 || index === queue.length - 1) {
+        logTts('native.enqueue', {
+          id, run: my, index, key: item.key, sentence: item.sentence,
+          chars: item.text.length, lang: state.lang, voice: prefs.voice ? 'selected' : 'system',
+        });
+      }
+      try {
+        native.speak(id, item.text, state.lang === 'ru' ? 'ru-RU' : 'en-US',
+          prefs.voice, prefs.rate, prefs.pitch, prefs.volume);
+      } catch (error) {
+        logTts('native.bridge.throw', { id, message: error?.message ?? String(error) });
+        onNativeEvent('error', id);
+      }
     });
   }
 
@@ -578,11 +653,14 @@ export function createTtsPlayer(host) {
     if (voice) utterance.voice = synth.getVoices().find((candidate) => (candidate.voiceURI || candidate.name) === voice.id) ?? null;
     utterance.onend = () => {
       if (my !== run || !state.playing) return;
+      logTts('browser.on_end', { run: my, key: item.key, sentence: item.sentence });
       queueIndex += 1;
       speakBrowser(my);
     };
+    utterance.onstart = () => logTts('browser.on_start', { run: my, key: item.key, sentence: item.sentence });
     utterance.onerror = (event) => {
       if (my !== run || !state.playing) return;
+      logTts('browser.on_error', { run: my, key: item.key, sentence: item.sentence, error: event.error });
       pause();
       showError(`Синтез речи завершился с ошибкой: ${event.error}`);
     };
@@ -605,6 +683,7 @@ export function createTtsPlayer(host) {
     }
     const item = resolveCurrent();
     if (!item) {
+      logTts('player.start.no_position', { current });
       showError('Не удалось определить место для озвучивания.');
       updatePlayerState();
       return;
@@ -613,8 +692,12 @@ export function createTtsPlayer(host) {
     state.playing = true;
     userAt = 0;
     const my = ++run;
+    clearTimeout(startWatchdog);
+    startWatchdog = 0;
+    nativeRunStarted = false;
     nativeRequests.clear();
-    stopEngine();
+    logTts('player.start', { run: my, key: item.key, sentence: item.sentence, lang: state.lang, native: Boolean(native) });
+    stopEngine('replace-queue');
     showPosition(item);
     queue = elementsQueue(current);
     queueIndex = 0;
@@ -623,20 +706,37 @@ export function createTtsPlayer(host) {
       showError('В выбранном месте нет текста для озвучивания.');
       return;
     }
+    logTts('queue.ready', {
+      run: my,
+      count: queue.length,
+      first: `${queue[0].key}#${queue[0].sentence}`,
+      last: `${queue.at(-1).key}#${queue.at(-1).sentence}`,
+    });
     updatePlayerState();
     syncNativePlayer();
-    if (native) speakNative(my);
+    if (native) {
+      speakNative(my);
+      startWatchdog = window.setTimeout(() => {
+        startWatchdog = 0;
+        if (my === run && state.playing && !nativeRunStarted) {
+          logTts('native.start.timeout', { run: my, queueLength: queue.length, firstId: queue[0]?.nativeId ?? null });
+        }
+      }, 5000);
+    }
     else speakBrowser(my);
   }
 
   function pause() {
+    logTts('player.pause', { run, playing: state.playing, current });
     clearTimeout(autoTimer);
     autoTimer = 0;
+    clearTimeout(startWatchdog);
+    startWatchdog = 0;
     autoPending = false;
     state.playing = false;
     run += 1;
     nativeRequests.clear();
-    stopEngine();
+    stopEngine('pause');
     updatePlayerState();
     syncNativePlayer();
   }
@@ -645,9 +745,11 @@ export function createTtsPlayer(host) {
     clearTimeout(autoTimer);
     autoTimer = 0;
     autoPending = true;
+    logTts('autostart.scheduled', { delayMs: 2000, current });
     updatePlayerState();
     autoTimer = window.setTimeout(() => {
       autoTimer = 0;
+      logTts('autostart.fired', { open: state.open, playing: state.playing, current });
       if (!state.open || state.playing) return;
       play();
     }, 2000);
@@ -655,6 +757,11 @@ export function createTtsPlayer(host) {
 
   function open(auto = false) {
     clearTimeout(autoTimer);
+    logTts('player.open', {
+      auto,
+      current,
+      savedPlace: state.place && { paper: state.place.paper, key: state.place.key, sentence: state.place.sentence },
+    });
     state.open = true;
     state.settingsOpen = false;
     showPosition(resolveCurrent(), false);
@@ -679,6 +786,7 @@ export function createTtsPlayer(host) {
   }
 
   function toggle() {
+    logTts('player.button', { autoPending, playing: state.playing, current });
     if (autoPending) {
       clearTimeout(autoTimer);
       autoPending = false;
@@ -890,6 +998,7 @@ export function createTtsPlayer(host) {
       }
     }
     loadVoices();
+    logTts('player.init', { native: Boolean(native), browserSpeech: Boolean(synth), paper: host.getPaper()?.paper.id ?? null });
     updatePlayerState();
     ui.back.addEventListener('click', () => void returnToPreviousPlace());
     ui.play.addEventListener('click', toggle);
@@ -962,6 +1071,44 @@ export function createTtsPlayer(host) {
     ui.dictionaryDialog.addEventListener('click', (event) => {
       if (event.target === ui.dictionaryDialog) ui.dictionaryDialog.close();
     });
+    ui.diagnosticsOpen.addEventListener('click', () => {
+      renderDiagnostics();
+      ui.diagnosticsDialog.showModal();
+      logTts('diagnostics.open', { webEntries: diagnostics.length });
+    });
+    ui.diagnosticsClose.addEventListener('click', () => ui.diagnosticsDialog.close());
+    ui.diagnosticsRefresh.addEventListener('click', renderDiagnostics);
+    ui.diagnosticsCopy.addEventListener('click', async () => {
+      const output = diagnosticsText();
+      try {
+        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(output);
+        else throw new Error('clipboard API unavailable');
+      } catch {
+        const field = document.createElement('textarea');
+        field.value = output;
+        field.style.position = 'fixed';
+        field.style.opacity = '0';
+        document.body.append(field);
+        field.select();
+        const copied = document.execCommand('copy');
+        field.remove();
+        if (!copied) {
+          host.showMessage('Не удалось скопировать журнал. Выделите его вручную.');
+          return;
+        }
+      }
+      host.showMessage('Журнал озвучки скопирован.');
+    });
+    ui.diagnosticsClear.addEventListener('click', () => {
+      diagnostics = [];
+      persistDiagnosticsNow();
+      try { native?.clearDiagnostics?.(); } catch {}
+      logTts('diagnostics.cleared');
+      renderDiagnostics();
+    });
+    ui.diagnosticsDialog.addEventListener('click', (event) => {
+      if (event.target === ui.diagnosticsDialog) ui.diagnosticsDialog.close();
+    });
     ui.dictionaryForm.addEventListener('submit', (event) => {
       event.preventDefault();
       const word = ui.dictionaryWord.value.trim();
@@ -1011,6 +1158,8 @@ export function createTtsPlayer(host) {
       if (state.sleepUntil !== null) updatePlayerState();
     }, 15_000);
     document.addEventListener('visibilitychange', () => {
+      logTts('document.visibility', { state: document.visibilityState, playing: state.playing });
+      if (document.visibilityState === 'hidden') persistDiagnosticsNow();
       if (!synth || document.visibilityState !== 'visible' || !state.playing) return;
       if (synth.paused) synth.resume();
       window.setTimeout(() => {
@@ -1021,6 +1170,19 @@ export function createTtsPlayer(host) {
     window.__liteNativeCommand = onNativeCommand;
     if (synth) synth.addEventListener('voiceschanged', loadVoices);
     ready = true;
+    window.addEventListener('pagehide', persistDiagnosticsNow);
+    window.addEventListener('error', (event) => logTts('web.error', {
+      message: event.message,
+      file: event.filename?.split('/').at(-1) ?? '',
+      line: event.lineno,
+    }));
+    window.addEventListener('unhandledrejection', (event) => {
+      const reason = event.reason;
+      logTts('web.unhandled_rejection', {
+        type: reason?.name ?? typeof reason,
+        message: reason?.message ?? String(reason),
+      });
+    });
     updatePlayerState();
     if (pendingListenOpen) {
       pendingListenOpen = false;
@@ -1119,10 +1281,23 @@ export function createTtsPlayer(host) {
   }
 
   function onNativeEvent(type, id) {
-    if (type === 'voices') return loadVoices();
+    if (type === 'voices') {
+      logTts('native.event', { type, id });
+      return loadVoices();
+    }
     const request = nativeRequests.get(id);
+    const shouldLog = !request || type === 'error'
+      || (type === 'start' && (request.index < 5 || request.index % 25 === 0))
+      || (type === 'end' && (request.index === queue.length - 1 || request.index < 5 || request.index % 25 === 0));
+    if (shouldLog) logTts('native.event', {
+      type, id, mapped: Boolean(request), index: request?.index ?? null,
+      key: request ? queue[request.index]?.key : null,
+      sentence: request ? queue[request.index]?.sentence : null,
+      playing: state.playing,
+    });
     if (!request) return;
     if (request.run !== run) {
+      logTts('native.event.stale', { type, id, eventRun: request.run, run });
       nativeRequests.delete(id);
       return;
     }
@@ -1130,6 +1305,10 @@ export function createTtsPlayer(host) {
     const item = queue[itemIndex];
     if (!item) return;
     if (type === 'start') {
+      nativeRunStarted = true;
+      clearTimeout(startWatchdog);
+      startWatchdog = 0;
+      logTts('native.first_start', { id, run, key: item.key, sentence: item.sentence });
       if (sleepDue()) {
         native.cancel();
         return updatePlayerState();
@@ -1139,6 +1318,7 @@ export function createTtsPlayer(host) {
     }
     nativeRequests.delete(id);
     if (type === 'error') {
+      logTts('native.playback.error', { id, key: item.key, sentence: item.sentence });
       pause();
       showError(`Не удалось озвучить текст в ${item.key}. Проверьте выбранный голос и язык.`);
       return;
@@ -1147,6 +1327,7 @@ export function createTtsPlayer(host) {
   }
 
   function onNativeCommand(action) {
+    logTts('native.command', { action, current, playing: state.playing });
     if (action === 'play') play();
     else if (action === 'pause') pause();
     else if (action === 'next') stepBlock(1);

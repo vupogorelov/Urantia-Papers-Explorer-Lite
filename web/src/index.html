@@ -70,6 +70,20 @@
       <div id="tts-dictionary-list" class="tts-dictionary-list" aria-live="polite"></div>
     </dialog>
 
+    <dialog id="tts-diagnostics-dialog" class="tts-dictionary-dialog tts-diagnostics-dialog" aria-labelledby="tts-diagnostics-title">
+      <header class="tts-dictionary-header">
+        <h2 id="tts-diagnostics-title">Журнал озвучки</h2>
+        <button id="tts-diagnostics-close" type="button" aria-label="Закрыть журнал">×</button>
+      </header>
+      <p class="tts-diagnostics-note">Журнал хранится только на этом устройстве. Текст книги не записывается.</p>
+      <div class="tts-diagnostics-actions">
+        <button id="tts-diagnostics-refresh" type="button">Обновить</button>
+        <button id="tts-diagnostics-copy" type="button">Скопировать</button>
+        <button id="tts-diagnostics-clear" type="button">Очистить</button>
+      </div>
+      <pre id="tts-diagnostics-output" class="tts-diagnostics-output" aria-live="polite"></pre>
+    </dialog>
+
     <div id="bottom-shell" class="bottom-shell">
       <section id="tts-player" class="tts-panel" aria-label="Озвучивание" hidden>
         <button id="tts-back" class="tts-back" type="button" hidden aria-label="Вернуться к предыдущему месту озвучивания"></button>
@@ -131,6 +145,10 @@
               </div>
               <button id="tts-dictionary-open" class="tts-setting-row tts-setting-action" type="button">
                 <span class="tts-setting-label">Словарь озвучки</span><span id="tts-dictionary-summary"></span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+              </button>
+              <button id="tts-diagnostics-open" class="tts-setting-row tts-setting-action" type="button">
+                <span class="tts-setting-label">Диагностика озвучки</span><span>Журнал</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
               </button>
               <div class="tts-setting-row tts-highlight-row">

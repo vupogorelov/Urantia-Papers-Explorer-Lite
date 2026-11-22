@@ -28,12 +28,15 @@ public final class MainActivity extends Activity {
     static MainActivity instance;
     private WebView web;
     private Speech speech;
+    private TtsDiagnostics ttsDiagnostics;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         instance = this;
-        speech = new Speech(this, (type, id) -> runOnUiThread(() -> emitTtsEvent(type, id)));
+        ttsDiagnostics = new TtsDiagnostics(this);
+        ttsDiagnostics.add("app.created", "sdk=" + Build.VERSION.SDK_INT);
+        speech = new Speech(this, (type, id) -> runOnUiThread(() -> emitTtsEvent(type, id)), ttsDiagnostics);
 
         web = new WebView(this);
         WebSettings settings = web.getSettings();
@@ -76,9 +79,24 @@ public final class MainActivity extends Activity {
     }
 
     private void emitTtsEvent(String type, String id) {
-        if (web == null) return;
+        if (web == null) {
+            ttsDiagnostics.add("bridge.event.dropped", "type=" + type + " id=" + id + " reason=webview_unavailable");
+            return;
+        }
+        if ("error".equals(type) || isDiagnosticId(id)) {
+            ttsDiagnostics.add("bridge.event.dispatch", "type=" + type + " id=" + id);
+        }
         web.evaluateJavascript("window.__liteTtsEvent&&window.__liteTtsEvent("
                 + JSONObject.quote(type) + "," + JSONObject.quote(id) + ")", null);
+    }
+
+    private boolean isDiagnosticId(String id) {
+        try {
+            long value = Long.parseLong(id);
+            return value <= 5 || value % 25 == 0;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
     }
 
     private void emitCommand(String action) {
@@ -108,7 +126,17 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    protected void onStop() {
+        if (ttsDiagnostics != null) {
+            ttsDiagnostics.add("app.stopped", "lifecycle=onStop");
+            ttsDiagnostics.flush();
+        }
+        super.onStop();
+    }
+
+    @Override
     protected void onDestroy() {
+                if (ttsDiagnostics != null) ttsDiagnostics.flush();
                 instance = null;
                 if (speech != null) speech.shutdown();
                 if (web != null) {
@@ -125,12 +153,24 @@ public final class MainActivity extends Activity {
                 }
 
                 @JavascriptInterface
+                public String diagnostics() {
+                    return ttsDiagnostics.read();
+                }
+
+                @JavascriptInterface
+                public void clearDiagnostics() {
+                    ttsDiagnostics.clear();
+                    ttsDiagnostics.add("diagnostics.cleared", "source=app");
+                }
+
+                @JavascriptInterface
                 public void speak(String id, String text, String language, String voice, double rate, double pitch, double volume) {
                     if (id == null || !id.matches("[0-9]+") || text == null || text.isEmpty() || text.length() > 20000
                             || !("ru-RU".equals(language) || "en-US".equals(language))
                             || !Double.isFinite(rate) || rate < 0.6 || rate > 2
                             || !Double.isFinite(pitch) || pitch < 0.5 || pitch > 2
                             || !Double.isFinite(volume) || volume < 0 || volume > 1) {
+                        ttsDiagnostics.add("bridge.speak.rejected", "id=" + id + " lang=" + language + " chars=" + (text == null ? -1 : text.length()));
                         runOnUiThread(() -> emitTtsEvent("error", id == null ? "" : id));
                         return;
                     }

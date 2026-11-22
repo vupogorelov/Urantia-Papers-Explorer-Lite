@@ -4,9 +4,22 @@ on:
   push:
     tags:
       - 'v*'
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build (for example v0.1.0)
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+concurrency:
+  group: apk-release-${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -14,8 +27,9 @@ jobs:
     env:
       ANDROID_BUILD_VARIANT: release
       ANDROID_VERSION_CODE: ${{ github.run_number }}
-      ANDROID_VERSION_NAME: ${{ github.ref_name }}
+      ANDROID_VERSION_NAME: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
       ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/upexplorer-release.keystore
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
 
     steps:
       - name: Check out project
@@ -51,6 +65,11 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - name: Publish GitHub Release
-        run: gh release create "$GITHUB_REF_NAME" dist/upexplorer.apk --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/upexplorer.apk --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/upexplorer.apk --verify-tag --generate-notes --title "$RELEASE_TAG"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

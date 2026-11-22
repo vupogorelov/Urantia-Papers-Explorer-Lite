@@ -204,18 +204,37 @@ public final class MainActivity extends Activity {
 
                 @JavascriptInterface
                 public void player(boolean playing) {
-                    PlayerService.update(MainActivity.this, playing);
+                    try {
+                        PlayerService.update(MainActivity.this, playing);
+                    } catch (RuntimeException error) {
+                        logBridgeFailure("player", error);
+                    }
                 }
 
                 @JavascriptInterface
                 public void meta(String title, String subtitle) {
-                    PlayerService.metadata(MainActivity.this, title, subtitle);
+                    try {
+                        PlayerService.metadata(MainActivity.this, title, subtitle);
+                    } catch (RuntimeException error) {
+                        logBridgeFailure("meta", error);
+                    }
                 }
 
                 @JavascriptInterface
                 public void end() {
-                    PlayerService.end(MainActivity.this);
+                    try {
+                        PlayerService.end(MainActivity.this);
+                    } catch (RuntimeException error) {
+                        logBridgeFailure("end", error);
+                    }
                 }
+    }
+
+    private void logBridgeFailure(String method, RuntimeException error) {
+        if (ttsDiagnostics == null) return;
+        String message = error.getMessage();
+        ttsDiagnostics.add("bridge." + method + ".failed",
+                "type=" + error.getClass().getSimpleName() + (message == null ? "" : " message=" + message));
     }
 
     private final class NativeUpdates {

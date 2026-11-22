@@ -304,7 +304,11 @@ export function createTtsPlayer(host) {
     if (!native) return;
     const paper = host.getPaper();
     const title = paper ? (paper.paper.id === 0 ? 'Предисловие' : `Текст ${paper.paper.id}`) : 'Книга Урантии';
-    native.meta(title, item?.text.slice(0, 100) ?? 'Книга Урантии');
+    try {
+      native.meta(title, item?.text.slice(0, 100) ?? 'Книга Урантии');
+    } catch (error) {
+      logTts('native.meta.throw', { message: error?.message ?? String(error) });
+    }
   }
 
   function progressFor(item) {
@@ -528,10 +532,18 @@ export function createTtsPlayer(host) {
   function syncNativePlayer() {
     if (!native) return;
     if (state.open) {
-      native.player(state.playing);
+      try {
+        native.player(state.playing);
+      } catch (error) {
+        logTts('native.player.throw', { message: error?.message ?? String(error) });
+      }
       metadata(resolveCurrent());
     } else {
-      native.end();
+      try {
+        native.end();
+      } catch (error) {
+        logTts('native.end.throw', { message: error?.message ?? String(error) });
+      }
     }
   }
 

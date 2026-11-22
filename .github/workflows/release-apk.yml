@@ -72,5 +72,9 @@ jobs:
           else
             gh release create "$RELEASE_TAG" dist/upexplorer.apk --verify-tag --generate-notes --title "$RELEASE_TAG"
           fi
+          notes="$(gh release view "$RELEASE_TAG" --json body --jq '.body // ""')"
+          notes="$(printf '%s\n' "$notes" | sed '/<!-- upexplorer-version-code=[0-9][0-9]* -->/d')"
+          printf '%s\n\n<!-- upexplorer-version-code=%s -->\n' "$notes" "$ANDROID_VERSION_CODE" > "$RUNNER_TEMP/release-notes.md"
+          gh release edit "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

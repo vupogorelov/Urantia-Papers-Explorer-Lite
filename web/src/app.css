@@ -204,7 +204,7 @@ button:focus-visible, input:focus-visible {
   z-index: 20;
   inset: 0 0 auto;
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  grid-template-columns: 88px minmax(0, 1fr) 88px;
   align-items: center;
   gap: 2px;
   height: calc(56px + var(--safe-top));
@@ -236,6 +236,18 @@ button:focus-visible, input:focus-visible {
   stroke-linejoin: round;
 }
 .icon-button:active { transform: scale(.92); }
+.topbar-actions { display: flex; min-width: 0; align-items: center; justify-content: flex-end; }
+.updates-button { position: relative; }
+.updates-dot {
+  position: absolute;
+  top: 8px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: #c45c43;
+}
 .current-place {
   display: grid;
   min-width: 0;
@@ -816,6 +828,46 @@ dialog.settings-dialog[open] { display: grid; }
   font: 600 16px/1.4 var(--ui-font);
 }
 .close-button { width: 32px; height: 32px; font-size: 26px; font-weight: 300; }
+.updates-dialog { gap: 12px; }
+.updates-head { display: flex; align-items: center; justify-content: space-between; }
+.updates-head h2 { margin: 0; font: 600 18px/1.35 var(--ui-font); }
+.updates-content {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-card-radius);
+  background: var(--ui-card);
+}
+.updates-status { margin: 0; color: var(--muted); font: 14px/1.45 var(--ui-font); }
+.updates-release { display: grid; gap: 14px; min-width: 0; }
+.updates-release-title { display: flex; align-items: center; gap: 12px; }
+.updates-release-title h3 { margin: 0; font: 600 15px/1.35 var(--ui-font); }
+.updates-release-title p { margin: 3px 0 0; color: var(--muted); font: 13px/1.4 var(--ui-font); }
+.updates-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.updates-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.updates-notes { color: var(--text); font: 14px/1.55 var(--ui-font); white-space: pre-wrap; overflow-wrap: anywhere; }
+.updates-install {
+  min-height: 44px;
+  justify-self: start;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font: 600 14px/1 var(--ui-font);
+  cursor: pointer;
+}
+.updates-install:active { transform: scale(.98); }
 .setting-row {
   min-width: 0;
   margin: 0;
@@ -1215,7 +1267,7 @@ dialog.settings-workspace[open] {
 .settings-preview-label { margin-top: 25px; }
 
 @media (min-width: 768px) {
-  .topbar { grid-template-columns: 48px minmax(0, 1fr) 44px; padding-right: max(18px, env(safe-area-inset-right)); padding-left: max(18px, env(safe-area-inset-left)); }
+  .topbar { grid-template-columns: 88px minmax(0, 1fr) 88px; padding-right: max(18px, env(safe-area-inset-right)); padding-left: max(18px, env(safe-area-inset-left)); }
   .reader { padding-right: 28px; padding-left: 28px; }
   .paper-head { margin-top: 1.7rem; }
   .contents-view { padding-right: 28px; padding-left: 28px; }

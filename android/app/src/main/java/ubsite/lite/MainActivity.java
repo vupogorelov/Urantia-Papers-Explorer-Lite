@@ -3,10 +3,13 @@ package ubsite.lite;
 import android.Manifest;
 import android.app.Activity;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageInfo;
+import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.View;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -21,7 +24,8 @@ import org.json.JSONObject;
 
 public final class MainActivity extends Activity {
     private static final String START_URL = "https://appassets.androidplatform.net/assets/www/index.html";
-    private static MainActivity instance;
+    static final String APK_URL = "https://github.com/vupogorelov/Urantia-Papers-Explorer-Lite/releases/latest/download/upexplorer.apk";
+    static MainActivity instance;
     private WebView web;
     private Speech speech;
 
@@ -41,6 +45,7 @@ public final class MainActivity extends Activity {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         web.addJavascriptInterface(new SystemBars(), "NativeBars");
         web.addJavascriptInterface(new NativeSpeech(), "NativeTts");
+        web.addJavascriptInterface(new NativeUpdates(), "NativeApp");
 
         WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
@@ -80,6 +85,11 @@ public final class MainActivity extends Activity {
         if (web == null) return;
         web.evaluateJavascript("window.__liteNativeCommand&&window.__liteNativeCommand("
                 + JSONObject.quote(action) + ")", null);
+    }
+
+    void emitUpdate(String state) {
+        if (web == null) return;
+        web.evaluateJavascript("window.__liteUpdateEvent&&window.__liteUpdateEvent(" + JSONObject.quote(state) + ")", null);
     }
 
     @Override
@@ -146,6 +156,46 @@ public final class MainActivity extends Activity {
                 public void end() {
                     PlayerService.end(MainActivity.this);
                 }
+    }
+
+    private final class NativeUpdates {
+        @JavascriptInterface
+        public String appVersion() {
+            try {
+                PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+                return info.versionName == null ? "" : info.versionName;
+            } catch (Exception ignored) {
+                return "";
+            }
+        }
+
+        @JavascriptInterface
+        public int appVersionCode() {
+            try {
+                PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+                return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                        ? (int) info.getLongVersionCode()
+                        : info.versionCode;
+            } catch (Exception ignored) {
+                return 0;
+            }
+        }
+
+        @JavascriptInterface
+        public void installApp(String url) {
+            if (!APK_URL.equals(url)) return;
+            runOnUiThread(() -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                        && !getPackageManager().canRequestPackageInstalls()) {
+                    Intent settings = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:" + getPackageName()));
+                    startActivity(settings);
+                    emitUpdate("permission");
+                    return;
+                }
+                Updater.start(MainActivity.this, APK_URL);
+            });
+        }
     }
 
     private final class SystemBars {

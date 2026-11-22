@@ -4,6 +4,7 @@ import { edgePull } from './edge-pull.js';
 import { pinchFont } from './pinch-font.js';
 import { createLocalStorage } from './storage.js';
 import { createTtsPlayer } from './tts.js';
+import './updates.js';
 
 const isAndroidAssets = location.pathname.includes('/assets/www/');
 const bookRoot = new URL(isAndroidAssets ? '../book/' : './book/', location.href);
@@ -998,6 +999,11 @@ const edgePullController = edgePull(document.documentElement, {
 });
 
 window.__liteHandleBack = () => {
+  const updatesDialog = document.querySelector('#updates-dialog');
+  if (updatesDialog.open) {
+    updatesDialog.close();
+    return true;
+  }
   if (document.querySelector('#tts-dictionary-dialog').open) {
     document.querySelector('#tts-dictionary-dialog').close();
     return true;

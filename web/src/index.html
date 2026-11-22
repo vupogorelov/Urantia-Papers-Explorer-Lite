@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#f0eee6" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; connect-src 'self' https://api.github.com; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <title>Urantia Papers Explorer</title>
     <link rel="stylesheet" href="./app.css" />
@@ -23,9 +23,15 @@
         <span class="current-kicker">Загружаем книгу…</span>
         <span class="current-title"></span>
       </button>
-      <button id="theme-toggle" class="icon-button theme-button" type="button" aria-label="Переключить тему">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" /></svg>
-      </button>
+      <div class="topbar-actions">
+        <button id="updates-open" class="icon-button updates-button" type="button" aria-label="Обновления" aria-haspopup="dialog" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
+          <span id="updates-dot" class="updates-dot" hidden></span>
+        </button>
+        <button id="theme-toggle" class="icon-button theme-button" type="button" aria-label="Переключить тему">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" /></svg>
+        </button>
+      </div>
     </header>
 
     <main id="reader" class="reader" tabindex="-1">
@@ -356,6 +362,29 @@
           </nav>
         </section>
       </div>
+    </dialog>
+
+    <dialog id="updates-dialog" class="settings-dialog updates-dialog" aria-labelledby="updates-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <header class="updates-head">
+        <h2 id="updates-title">Обновления</h2>
+        <button id="updates-close" class="icon-button" type="button" aria-label="Закрыть">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12" /></svg>
+        </button>
+      </header>
+      <section id="updates-content" class="updates-content" aria-live="polite">
+        <p id="updates-status" class="updates-status">Проверяем обновления…</p>
+        <article id="updates-release" class="updates-release" hidden>
+          <div class="updates-release-title">
+            <span class="updates-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3" /></svg>
+            </span>
+            <div><h3 id="updates-version">Обновление</h3><p id="updates-installed"></p></div>
+          </div>
+          <div id="updates-notes" class="updates-notes"></div>
+          <button id="updates-install" class="updates-install" type="button" hidden>Обновить</button>
+        </article>
+      </section>
     </dialog>
 
   </body>

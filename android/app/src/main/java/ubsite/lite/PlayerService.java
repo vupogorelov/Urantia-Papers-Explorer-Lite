@@ -74,7 +74,6 @@ public final class PlayerService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        instance = this;
         NotificationManager manager = getSystemService(NotificationManager.class);
         NotificationChannel channel = new NotificationChannel(CHANNEL, getString(R.string.tts_channel), NotificationManager.IMPORTANCE_LOW);
         channel.setShowBadge(false);
@@ -92,10 +91,13 @@ public final class PlayerService extends Service {
         IntentFilter filter = new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(audioBecomingNoisy, filter, Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(audioBecomingNoisy, filter);
+        // Publish the service only after its MediaSession is fully initialized.
+        // The WebView bridge can call metadata() from another thread at any time.
+        instance = this;
     }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
+    public synchronized int onStartCommand(Intent intent, int flags, int startId) {
         Notification notification = buildNotification();
         if (Build.VERSION.SDK_INT >= 29) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
@@ -114,7 +116,8 @@ public final class PlayerService extends Service {
         return START_NOT_STICKY;
     }
 
-    private void refresh() {
+    private synchronized void refresh() {
+        if (mediaSession == null) return;
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.notify(NOTIFICATION_ID, buildNotification());
     }
@@ -174,11 +177,18 @@ public final class PlayerService extends Service {
     }
 
     @Override
-    public void onDestroy() {
-        instance = null;
-        unregisterReceiver(audioBecomingNoisy);
-        mediaSession.setActive(false);
-        mediaSession.release();
+    public synchronized void onDestroy() {
+        if (instance == this) instance = null;
+        try {
+            unregisterReceiver(audioBecomingNoisy);
+        } catch (IllegalArgumentException ignored) {
+            // Receiver may not have been registered if service setup failed.
+        }
+        if (mediaSession != null) {
+            mediaSession.setActive(false);
+            mediaSession.release();
+            mediaSession = null;
+        }
         stopForeground(STOP_FOREGROUND_REMOVE);
         super.onDestroy();
     }

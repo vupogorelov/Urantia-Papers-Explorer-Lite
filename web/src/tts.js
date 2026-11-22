@@ -801,9 +801,11 @@ export function createTtsPlayer(host) {
     logTts('player.button', { autoPending, playing: state.playing, current });
     if (autoPending) {
       clearTimeout(autoTimer);
+      autoTimer = 0;
       autoPending = false;
       updatePlayerState();
-      return;
+      logTts('autostart.started_early', { source: 'player-button' });
+      return play();
     }
     if (state.playing) pause();
     else play();

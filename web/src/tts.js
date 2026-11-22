@@ -153,10 +153,21 @@ export function createTtsPlayer(host) {
   let backTimer = 0;
   let longPressTriggered = false;
   let initialized = false;
+  let ready = false;
+  let pendingListenOpen = false;
 
   function showError(text) {
     host.showMessage(text);
   }
+
+  ui.button.addEventListener('click', () => {
+    if (!ready) {
+      pendingListenOpen = true;
+      return;
+    }
+    if (state.open) close();
+    else open(state.autoStart);
+  });
 
   async function save() {
     if (!host.storage) return;
@@ -563,6 +574,7 @@ export function createTtsPlayer(host) {
 
   function start() {
     clearTimeout(autoTimer);
+    autoTimer = 0;
     autoPending = false;
     if (!state.open) state.open = true;
     if (!native && !synth) {
@@ -601,6 +613,7 @@ export function createTtsPlayer(host) {
 
   function pause() {
     clearTimeout(autoTimer);
+    autoTimer = 0;
     autoPending = false;
     state.playing = false;
     run += 1;
@@ -611,9 +624,14 @@ export function createTtsPlayer(host) {
 
   function scheduleAutoStart() {
     clearTimeout(autoTimer);
+    autoTimer = 0;
     autoPending = true;
     updatePlayerState();
-    autoTimer = window.setTimeout(() => start(), 2000);
+    if (!resolveCurrent()) return;
+    autoTimer = window.setTimeout(() => {
+      autoTimer = 0;
+      start();
+    }, 2000);
   }
 
   function open(auto = false) {
@@ -855,10 +873,6 @@ export function createTtsPlayer(host) {
     }
     loadVoices();
     updatePlayerState();
-    ui.button.addEventListener('click', () => {
-      if (state.open) close();
-      else open(state.autoStart);
-    });
     ui.back.addEventListener('click', () => void returnToPreviousPlace());
     ui.play.addEventListener('click', toggle);
     ui.language.addEventListener('click', () => {
@@ -985,6 +999,12 @@ export function createTtsPlayer(host) {
     window.__liteTtsEvent = onNativeEvent;
     window.__liteNativeCommand = onNativeCommand;
     if (synth) synth.addEventListener('voiceschanged', loadVoices);
+    ready = true;
+    updatePlayerState();
+    if (pendingListenOpen) {
+      pendingListenOpen = false;
+      open(state.autoStart);
+    }
   }
 
   function changePitch(direction) {
@@ -1060,7 +1080,10 @@ export function createTtsPlayer(host) {
         : { key: data.paragraphs[0]?.ref ?? 'h0', sentence: 0 };
       window.setTimeout(() => {
         if (target.play) start();
-        else showPosition(resolveCurrent());
+        else {
+          showPosition(resolveCurrent());
+          if (state.open && autoPending && !autoTimer) scheduleAutoStart();
+        }
       }, 250);
       return;
     }
@@ -1072,6 +1095,10 @@ export function createTtsPlayer(host) {
       pause();
       current = null;
       clearHighlight();
+    }
+    if (state.open && autoPending && !autoTimer) {
+      if (!resolveCurrent()) current = firstVisible();
+      if (resolveCurrent()) scheduleAutoStart();
     }
   }
 

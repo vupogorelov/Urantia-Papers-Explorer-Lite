@@ -125,8 +125,8 @@ public final class MainActivity extends Activity {
                 }
 
                 @JavascriptInterface
-                public void speak(String id, String text, String language, String voice, double rate, double pitch, double volume, boolean replaceQueue) {
-                    if (id == null || !id.matches("[0-9]+:[0-9]+") || text == null || text.isEmpty() || text.length() > 20000
+                public void speak(String id, String text, String language, String voice, double rate, double pitch, double volume) {
+                    if (id == null || !id.matches("[0-9]+") || text == null || text.isEmpty() || text.length() > 20000
                             || !("ru-RU".equals(language) || "en-US".equals(language))
                             || !Double.isFinite(rate) || rate < 0.6 || rate > 2
                             || !Double.isFinite(pitch) || pitch < 0.5 || pitch > 2
@@ -134,7 +134,7 @@ public final class MainActivity extends Activity {
                         runOnUiThread(() -> emitTtsEvent("error", id == null ? "" : id));
                         return;
                     }
-                    speech.speak(id, text, language, voice == null ? "" : voice, (float) rate, (float) pitch, (float) volume, replaceQueue);
+                    speech.speak(id, text, language, voice == null ? "" : voice, (float) rate, (float) pitch, (float) volume);
                 }
 
                 @JavascriptInterface

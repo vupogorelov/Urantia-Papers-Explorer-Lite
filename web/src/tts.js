@@ -142,12 +142,15 @@ export function createTtsPlayer(host) {
   let queue = [];
   let queueIndex = 0;
   let run = 0;
+  let nativeSequence = 0;
+  const nativeRequests = new Map();
   let onlyKey = null;
   let sessionStart = null;
   let pendingOpen = null;
   let voiceAt = 0;
   let sleepTimer = 0;
   let autoTimer = 0;
+  let nativeStartTimer = 0;
   let autoPending = false;
   let backPlace = null;
   let backTimer = 0;
@@ -538,10 +541,13 @@ export function createTtsPlayer(host) {
   function speakNative(my) {
     const prefs = state.voices[state.lang];
     queue.forEach((item, index) => {
-      const id = `${my}:${index}`;
+      // The working source Android bridge uses decimal utterance IDs. Some OEM TTS
+      // engines are stricter than Android's interface contract about ID punctuation.
+      const id = String(++nativeSequence);
       item.nativeId = id;
+      nativeRequests.set(id, { run: my, index });
       native.speak(id, item.text, state.lang === 'ru' ? 'ru-RU' : 'en-US',
-        prefs.voice, prefs.rate, prefs.pitch, prefs.volume, index === 0);
+        prefs.voice, prefs.rate, prefs.pitch, prefs.volume);
     });
   }
 
@@ -569,7 +575,11 @@ export function createTtsPlayer(host) {
       pause();
       showError(`Синтез речи завершился с ошибкой: ${event.error}`);
     };
-    synth.speak(utterance);
+    // Chromium can drop an utterance sent immediately after cancel(). The source
+    // player lets the speech engine process cancellation before queueing the next sentence.
+    window.setTimeout(() => {
+      if (my === run && state.playing) synth.speak(utterance);
+    }, 60);
   }
 
   function start() {
@@ -604,22 +614,35 @@ export function createTtsPlayer(host) {
       return;
     }
     const my = ++run;
-    // Android's first utterance uses QUEUE_FLUSH to replace an older queue. Calling
-    // TextToSpeech.stop() immediately before speak() can race its asynchronous binder
-    // command and cancel the new utterance. Browser synthesis still needs explicit cancel.
-    if (!native) stopEngine();
+    nativeRequests.clear();
+    clearTimeout(nativeStartTimer);
+    nativeStartTimer = 0;
+    // Match the source player: cancel the previous native/browser queue, then enqueue
+    // the new reading session with QUEUE_ADD.
+    stopEngine();
     updatePlayerState();
     syncNativePlayer();
-    if (native) speakNative(my);
+    if (native) {
+      // The source app reaches speech after its asynchronous dictionary load. Keep
+      // that cancellation-to-speak gap here: Android TTS may otherwise process
+      // stop() after the new queue and cancel the first utterance.
+      nativeStartTimer = window.setTimeout(() => {
+        nativeStartTimer = 0;
+        if (my === run && state.playing) speakNative(my);
+      }, 150);
+    }
     else speakBrowser(my);
   }
 
   function pause() {
     clearTimeout(autoTimer);
     autoTimer = 0;
+    clearTimeout(nativeStartTimer);
+    nativeStartTimer = 0;
     autoPending = false;
     state.playing = false;
     run += 1;
+    nativeRequests.clear();
     stopEngine();
     updatePlayerState();
     syncNativePlayer();
@@ -633,6 +656,8 @@ export function createTtsPlayer(host) {
     if (!resolveCurrent()) return;
     autoTimer = window.setTimeout(() => {
       autoTimer = 0;
+      if (!state.open || state.playing) return;
+      if (!currentIsVisible(resolveCurrent())) current = firstVisible();
       start();
     }, 2000);
   }
@@ -1107,9 +1132,13 @@ export function createTtsPlayer(host) {
 
   function onNativeEvent(type, id) {
     if (type === 'voices') return loadVoices();
-    const [eventRun, indexText] = id.split(':');
-    if (Number(eventRun) !== run) return;
-    const itemIndex = Number(indexText);
+    const request = nativeRequests.get(id);
+    if (!request) return;
+    if (request.run !== run) {
+      nativeRequests.delete(id);
+      return;
+    }
+    const itemIndex = request.index;
     const item = queue[itemIndex];
     if (!item) return;
     if (type === 'start') {
@@ -1120,6 +1149,7 @@ export function createTtsPlayer(host) {
       updateActive(item);
       return;
     }
+    nativeRequests.delete(id);
     if (type === 'error') {
       pause();
       showError(`Не удалось озвучить текст в ${item.key}. Проверьте выбранный голос и язык.`);

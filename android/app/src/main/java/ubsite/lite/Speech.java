@@ -142,7 +142,7 @@ final class Speech extends UtteranceProgressListener {
         return voice.getName();
     }
 
-    synchronized void speak(String id, String text, String language, String voice, float rate, float pitch, float volume, boolean replaceQueue) {
+    synchronized void speak(String id, String text, String language, String voice, float rate, float pitch, float volume) {
         int separator = voice.indexOf('|');
         String packageName = separator > 0 ? voice.substring(0, separator) : defaultPackage;
         Engine engine = engines.get(packageName);
@@ -153,7 +153,7 @@ final class Speech extends UtteranceProgressListener {
         }
         String voiceName = separator > 0 ? voice.substring(separator + 1) : voice;
         Engine selected = engine;
-        Runnable request = () -> say(selected, id, text, language, voiceName, rate, pitch, volume, replaceQueue);
+        Runnable request = () -> say(selected, id, text, language, voiceName, rate, pitch, volume);
         if (!selected.ready) {
             selected.waiting.add(request);
             selected.waitingIds.add(id);
@@ -161,7 +161,7 @@ final class Speech extends UtteranceProgressListener {
         else request.run();
     }
 
-    private void say(Engine engine, String id, String text, String language, String voice, float rate, float pitch, float volume, boolean replaceQueue) {
+    private void say(Engine engine, String id, String text, String language, String voice, float rate, float pitch, float volume) {
         TextToSpeech tts = engine.tts;
         if (!Objects.equals(voice, engine.lastVoice) || !Objects.equals(language, engine.lastLanguage)) {
             Voice selectedVoice = voice.isEmpty() ? null : find(tts, voice);
@@ -175,8 +175,7 @@ final class Speech extends UtteranceProgressListener {
         Bundle parameters = new Bundle();
         parameters.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume);
         try {
-            int queueMode = replaceQueue ? TextToSpeech.QUEUE_FLUSH : TextToSpeech.QUEUE_ADD;
-            if (tts.speak(text, queueMode, parameters, id) != TextToSpeech.SUCCESS) {
+            if (tts.speak(text, TextToSpeech.QUEUE_ADD, parameters, id) != TextToSpeech.SUCCESS) {
                 events.emit("error", id);
             }
         } catch (RuntimeException error) {

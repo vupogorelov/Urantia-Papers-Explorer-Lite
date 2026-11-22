@@ -541,7 +541,7 @@ export function createTtsPlayer(host) {
       const id = `${my}:${index}`;
       item.nativeId = id;
       native.speak(id, item.text, state.lang === 'ru' ? 'ru-RU' : 'en-US',
-        prefs.voice, prefs.rate, prefs.pitch, prefs.volume);
+        prefs.voice, prefs.rate, prefs.pitch, prefs.volume, index === 0);
     });
   }
 
@@ -604,7 +604,10 @@ export function createTtsPlayer(host) {
       return;
     }
     const my = ++run;
-    stopEngine();
+    // Android's first utterance uses QUEUE_FLUSH to replace an older queue. Calling
+    // TextToSpeech.stop() immediately before speak() can race its asynchronous binder
+    // command and cancel the new utterance. Browser synthesis still needs explicit cancel.
+    if (!native) stopEngine();
     updatePlayerState();
     syncNativePlayer();
     if (native) speakNative(my);
